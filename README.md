@@ -50,6 +50,8 @@ pip install bleak cryptography
 
 > **Prerequisite**: You need a working installation of the Better Light app (`one.shade.app`) that has already paired and provisioned your lamps. The app is no longer on the App Store, so use a backup copy (e.g. from iMazing's app library or an old iTunes backup). **Do not update the app or the lamp firmware** — user reports confirm this breaks pairing.
 
+#### iOS (tested)
+
 The mesh keys are stored unencrypted in the app's local storage. Use [iMazing](https://imazing.com) (free tier is enough) to pull the app container from your iPhone:
 
 1. iMazing → select device → Apps → Better Light → "Manage App" → "Export Documents"
@@ -61,7 +63,25 @@ The mesh keys are stored unencrypted in the app's local storage. Use [iMazing](h
    - `ivIndex` → IV index (usually `0`)
    - Per-lamp entries with `unicastAddress` (mesh addr) and the BLE MAC address
 
-Fill these into the constants at the top of `mesh_crypto.py`.
+#### Android (untested — likely works)
+
+The app package is `one.shade.app`. On Android the equivalent data file is likely stored under the app's internal storage at a path such as:
+
+```
+/data/data/one.shade.app/files/shade/provisionModelData
+```
+
+To access it without root you can use [ADB](https://developer.android.com/tools/adb) with a backup, or on a rooted device pull the file directly:
+
+```bash
+adb shell "run-as one.shade.app cat files/shade/provisionModelData" > provisionModelData
+```
+
+The JSON structure should be identical to the iOS version. **This has not been tested** — if you try it, please open an issue or PR with your findings.
+
+---
+
+Fill the extracted values into the constants at the top of `mesh_crypto.py`.
 
 ### 3. Find your lamp addresses
 
