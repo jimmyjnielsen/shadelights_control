@@ -1,0 +1,54 @@
+# Shadelights ØS1 — Home Assistant configuration
+#
+# Add the sections below to your configuration.yaml (or split into
+# separate files if you use the packages/split config approach).
+#
+# Replace 'raspberrypi.local' with the hostname or IP of your Pi.
+
+# ── REST commands (low-level) ────────────────────────────────────────────────
+rest_command:
+  shadelights_on:
+    url: "http://raspberrypi.local:8765/on"
+    method: POST
+  shadelights_off:
+    url: "http://raspberrypi.local:8765/off"
+    method: POST
+  shadelights_scene:
+    url: "http://raspberrypi.local:8765/scene/{{ scene }}"
+    method: POST
+
+# ── Switch entity (on/off) ───────────────────────────────────────────────────
+switch:
+  - platform: rest
+    name: Shadelights
+    resource: http://raspberrypi.local:8765/status
+    body_on: '{"power": "on"}'
+    body_off: '{"power": "off"}'
+    is_on_template: "{{ value_json.power == 'on' }}"
+    headers:
+      Content-Type: application/json
+    scan_interval: 60
+    command_on: http://raspberrypi.local:8765/on
+    command_off: http://raspberrypi.local:8765/off
+
+# ── Scene selector ───────────────────────────────────────────────────────────
+input_select:
+  shadelights_scene:
+    name: Shadelights Scene
+    options:
+      - "1 - Soft Nude"
+      - "2 - Gamer's Light"
+      - "3 - Lucky Green"
+      - "4 - Golden Latte"
+    icon: mdi:palette
+
+# ── Automation: apply scene when selector changes ────────────────────────────
+automation:
+  - alias: "Shadelights scene changed"
+    trigger:
+      - platform: state
+        entity_id: input_select.shadelights_scene
+    action:
+      - service: rest_command.shadelights_scene
+        data:
+          scene: "{{ trigger.to_state.state[0] }}"

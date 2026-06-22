@@ -1,0 +1,14 @@
+[Unit]
+Description=Shadelights BLE Mesh REST API
+After=bluetooth.target network.target
+
+[Service]
+Type=simple
+User=jjn
+WorkingDirectory=/home/jjn/shadelights
+ExecStart=/usr/bin/python3 /home/jjn/shadelights/shade_api.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
