@@ -18,7 +18,6 @@ import asyncio, sys
 from quart import Quart, jsonify, request
 from bleak import BleakClient, BleakScanner, BleakError
 
-sys.path.insert(0, '/home/pi/shadelights')
 import mesh_crypto as mc
 
 HOST = '0.0.0.0'

@@ -23,22 +23,26 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.ciphers.aead import AESCCM
 from bleak import BleakClient
 
-# ── Keys — fill in your own (see README.md) ───────────────────────────────────
-# Extract from: iMazing → Better Light app → Container/Documents/shade/
-# File: provisionModelData  (JSON, keys are hex strings)
-NET_KEY = bytes.fromhex('YOUR_NET_KEY_HEX_HERE')
-APP_KEY = bytes.fromhex('YOUR_APP_KEY_HEX_HERE')
-
-# ── Mesh addresses — fill in your own ────────────────────────────────────────
-# Run scan_lamps.py to find lamp BLE MACs; mesh addresses are in provisionModelData
-LAMP_GATT = {
-    0x0021: 'AA:BB:CC:DD:EE:FF',   # Lamp 1 BLE MAC → mesh unicast address
-    0x0041: 'AA:BB:CC:DD:EE:FE',   # Lamp 2 BLE MAC → mesh unicast address
-}
-GROUP_ADDR  = 0xC001   # group address for all lamps (from provisionModelData)
-PROV_ADDR   = 0x0001   # provisioner unicast address (from provisionModelData)
-IV_INDEX    = 0x00000000   # from provisionModelData ivIndex field
-SEQ_FILE    = '/home/pi/.shade_seq'   # persists sequence counter between invocations
+# ── Instance configuration ────────────────────────────────────────────────────
+# Keys, addresses and paths live in config.py (gitignored).
+# Copy config.example.py → config.py and fill in your values, or run:
+#   python3 parse_provision_data.py /path/to/shade --write-config
+try:
+    import config as _cfg
+    NET_KEY    = bytes.fromhex(_cfg.NET_KEY)
+    APP_KEY    = bytes.fromhex(_cfg.APP_KEY)
+    LAMP_GATT  = _cfg.LAMP_GATT
+    GROUP_ADDR = _cfg.GROUP_ADDR
+    PROV_ADDR  = _cfg.PROV_ADDR
+    IV_INDEX   = _cfg.IV_INDEX
+    SEQ_FILE   = _cfg.SEQ_FILE
+except ImportError:
+    print("ERROR: config.py not found. Copy config.example.py → config.py and fill in your keys.",
+          file=sys.stderr)
+    sys.exit(1)
+except (AttributeError, ValueError) as e:
+    print(f"ERROR: config.py is incomplete or invalid: {e}", file=sys.stderr)
+    sys.exit(1)
 
 def next_seq() -> int:
     """Load, increment, save and return the next 24-bit sequence number."""

@@ -8,6 +8,10 @@ __pycache__/
 
 # App data extracted from iOS (contains personal keys)
 betterlight/
+shade
+
+# Instance config — copy config.example.py → config.py and fill in your values
+config.py
 
 # nrfutil binary (download separately)
 nrfutil
