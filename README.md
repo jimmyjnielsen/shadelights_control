@@ -140,6 +140,66 @@ curl http://raspberrypi.local:8765/status
 
 The service reconnects automatically if the BLE connection drops, and retries once on failure.
 
+### 6. Home Assistant integration
+
+If Home Assistant runs on the same Pi as the service (e.g. in a Docker container with `--network=host`), it can reach the API directly on `localhost:8765`. If HA is on a separate machine, replace `localhost` with the Pi's hostname or IP.
+
+Append the following to your `configuration.yaml`:
+
+```yaml
+rest_command:
+  shadelights_on:
+    url: "http://localhost:8765/on"
+    method: POST
+  shadelights_off:
+    url: "http://localhost:8765/off"
+    method: POST
+  shadelights_scene:
+    url: "http://localhost:8765/scene/{{ scene }}"
+    method: POST
+
+command_line:
+  - switch:
+      name: Shadelights
+      unique_id: shadelights_power
+      command_on: "curl -s -X POST http://localhost:8765/on"
+      command_off: "curl -s -X POST http://localhost:8765/off"
+      command_state: "curl -s http://localhost:8765/status"
+      value_template: "{{ value_json.power == 'on' }}"
+      icon: mdi:ceiling-light
+
+input_select:
+  shadelights_scene:
+    name: Shadelights Scene
+    options:
+      - "1 - Soft Nude"       # replace with your own mood names
+      - "2 - Gamer's Light"
+      - "3 - Lucky Green"
+      - "4 - Golden Latte"
+    icon: mdi:palette
+```
+
+Add the following to `automations.yaml` to apply the selected scene:
+
+```yaml
+- id: shadelights_scene_changed
+  alias: "Shadelights: apply scene"
+  trigger:
+    - platform: state
+      entity_id: input_select.shadelights_scene
+  action:
+    - action: rest_command.shadelights_scene
+      data:
+        scene: "{{ trigger.to_state.state[0] }}"
+  mode: single
+```
+
+Restart Home Assistant. Two entities will appear:
+- **Shadelights** — a switch for on/off, polls `/status` every 30 seconds to stay in sync
+- **Shadelights Scene** — a dropdown for scene selection; update the option labels to match your own mood names from `parse_provision_data.py`
+
+A ready-to-use copy of both snippets is in `homeassistant.yaml`.
+
 ## Sequence numbers
 
 BLE Mesh has replay protection: the lamp ignores any message with a `(SRC, SEQ)` pair it has seen before. The script persists the sequence counter in `~/.shade_seq` and increments it on every call. If you move the script to a new device, start the counter above the last value used.
