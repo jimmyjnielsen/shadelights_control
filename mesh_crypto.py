@@ -301,12 +301,13 @@ def main():
         # Nordic vendor model scene select (company 0x0059, opcode 0x23).
         # Opcode bytes: 0xE3 0x59 0x00  (0xC0|0x23, company_lo, company_hi)
         # Params: scene_index (0-based) + TID (increments per send).
-        # Scenes 1-4 map to indices 0-3.
+        # Scene number n maps to index n-1; the number of scenes depends on
+        # what the user has configured in the Better Light app.
         if len(sys.argv) < 3:
-            print("Usage: scene <1-4>  [dst_hex]"); sys.exit(1)
+            print("Usage: scene <n>  [dst_hex]"); sys.exit(1)
         scene_num = int(sys.argv[2])
-        if not 1 <= scene_num <= 4:
-            print("Scene must be 1-4"); sys.exit(1)
+        if scene_num < 1:
+            print("Scene number must be >= 1"); sys.exit(1)
         seq        = next_seq()
         dst        = int(sys.argv[3], 16) if len(sys.argv) > 3 else GROUP_ADDR
         scene_idx  = scene_num - 1          # 0-based
