@@ -99,17 +99,46 @@ python3 scan_lamps.py
 
 This scans for BLE devices advertising the Mesh Proxy service and prints their MACs. Match them to the addresses in `provisionModelData`.
 
-### 4. Copy to Pi and run
+### 4. Copy scripts to the Pi
 
 ```bash
-scp mesh_crypto.py pi@raspberrypi:~/
-ssh pi@raspberrypi
-python3 mesh_crypto.py on
-python3 mesh_crypto.py scene 2
-python3 mesh_crypto.py off
+scp mesh_crypto.py shade_api.py pi@raspberrypi:~/shadelights/
 ```
 
-The first connection takes 3–5 seconds (BLE establishment). Subsequent calls are the same since each opens a fresh connection.
+You can test commands directly:
+
+```bash
+ssh pi@raspberrypi
+python3 ~/shadelights/mesh_crypto.py on
+python3 ~/shadelights/mesh_crypto.py scene 2
+python3 ~/shadelights/mesh_crypto.py off
+```
+
+Each direct call opens a fresh BLE connection, which takes 3–5 seconds. For faster and persistent control, run `shade_api.py` as a service instead (see below).
+
+### 5. Run as a persistent REST API service
+
+`shade_api.py` is a small Flask HTTP server that keeps a permanent BLE connection open to the lamp. Commands sent to it respond in under a second since no reconnection is needed.
+
+Install and start it as a systemd service:
+
+```bash
+sudo cp shadelights.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable shadelights   # start automatically on boot
+sudo systemctl start shadelights
+```
+
+Test the endpoints:
+
+```bash
+curl -X POST http://raspberrypi.local:8765/on
+curl -X POST http://raspberrypi.local:8765/scene/2
+curl -X POST http://raspberrypi.local:8765/off
+curl http://raspberrypi.local:8765/status
+```
+
+The service reconnects automatically if the BLE connection drops, and retries once on failure.
 
 ## Sequence numbers
 
