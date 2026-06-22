@@ -1,0 +1,20 @@
+__pycache__/
+*.py[cod]
+
+# Personal BLE captures (contain device addresses)
+*.pklg
+*.pcapng
+*.pcap
+
+# App data extracted from iOS (contains personal keys)
+betterlight/
+
+# nrfutil binary (download separately)
+nrfutil
+
+# Sequence counter (device-specific)
+.shade_seq
+
+# Claude Code internal
+CLAUDE.md
+memory/
