@@ -25,6 +25,72 @@ Traffic was captured passively using Apple's **PacketLogger** tool:
 
 The `.pklg` format uses little-endian length and timestamp fields. After correcting for this (an initial big-endian assumption produced zero records), the capture was parsed with Python and filtered to BLE Mesh Proxy PDUs.
 
+## The `shade` File Format
+
+The file at `Container/Documents/shade` is a JSON object with four top-level keys:
+
+| Key | Type | Content |
+|-----|------|---------|
+| `provisionModelData` | base64 string | JSON blob with mesh keys |
+| `houseData` | base64 string | JSON blob with rooms, lamps, buttons, moods |
+| `version` | integer | App data format version |
+| `extraString` | base64 string | Additional data (not needed for control) |
+
+**`provisionModelData`** (after base64 decode) contains:
+
+```json
+{
+  "netKey": [14, 52, 57, ...],   // 16-byte array → NET_KEY
+  "appKey": [120, 110, 67, ...], // 16-byte array → APP_KEY
+  "authKey": [...],
+  "currentGroupId": 49153,       // 0xC001 — group address for all lamps
+  "currentDeviceId": 129
+}
+```
+
+**`houseData`** (after base64 decode) contains the room/device hierarchy:
+
+```json
+{
+  "rooms": [{
+    "name": "Køkken",
+    "groupId": 49153,
+    "orbs": [{                         // ORB = pendant lamp
+      "name": "ØS1",
+      "mac": "DD:ED:D3:82:3D:DD",     // BLE MAC address
+      "address": 33,                   // mesh unicast address (0x0021)
+      "firmwareAppVersion": 17,
+      "moods": [...]                   // per-lamp copy of the moods
+    }],
+    "eclipses": [{                     // eclipse = mesh button
+      "name": "Node",
+      "mac": "C4:53:3D:22:07:24",
+      "address": 97                    // mesh unicast address (0x0061)
+    }],
+    "moodMap": {
+      "count": 4,
+      "moods": [{
+        "index": 0,                    // 0-based; use index+1 with mesh_crypto.py
+        "name": "Soft nude",           // user-defined name
+        "icon": "NIGHT",               // one of ~19 predefined icons
+        "MidRed": 44,                  // LED channel values (0 = off)
+        "MidGreen": 0,
+        "MidBlue": 0,
+        "MidWarm": 0,
+        "TopWarm": 0,
+        "TopCold": 0,
+        "BottomWarm": 32,
+        "BottomCold": 0
+      }, ...]
+    }
+  }]
+}
+```
+
+The IV index and provisioner unicast address are not stored in the file — they default to `0x00000000` and `0x0001` respectively.
+
+Mood names, icons, and channel values are entirely user-defined in the app. The number of moods is also variable (up to the number of slots the app supports). `parse_provision_data.py` decodes all of this and prints it in a ready-to-use form.
+
 ## Step 3: Identifying the Protocol
 
 Contrary to the CSRmesh hypothesis, GATT service discovery revealed the lamps expose the **standard Bluetooth SIG Mesh 1.0 GATT Proxy service** (UUID `0x1828`). This means the lamps accept standard mesh messages over a normal BLE connection — no proprietary stack needed.
