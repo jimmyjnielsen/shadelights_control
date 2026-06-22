@@ -51,7 +51,7 @@ The solution was to use an **nRF52840 Dongle** (Nordic PCA10059) as a passive BL
 2. The Wireshark extcap plugin was registered via `nrfutil ble-sniffer bootstrap`.
 3. A capture was taken while switching between the 4 scenes in the Better Light app twice.
 
-The capture contained 77 BLE Mesh Network PDUs. Since the NID derived from our NetKey (`0x7c`) matched the NID in the captured packets, all PDUs could be decrypted with our known keys. `decrypt_capture.py` deobfuscates and decrypts each PDU and prints the plaintext access PDU opcode and parameters.
+Since the NID derived from our NetKey (`0x7c`) matched the NID in the captured packets, all PDUs could be decrypted with our known keys. `decrypt_capture.py` deobfuscates and decrypts each PDU and prints the plaintext access PDU opcode and parameters.
 
 ## Step 6: Decoding the Scene Command
 
