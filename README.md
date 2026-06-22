@@ -48,6 +48,8 @@ pip install bleak cryptography
 
 ### 2. Extract your keys from the Better Light app
 
+> **Prerequisite**: You need a working installation of the Better Light app (`one.shade.app`) that has already paired and provisioned your lamps. The app is no longer on the App Store, so use a backup copy (e.g. from iMazing's app library or an old iTunes backup). **Do not update the app or the lamp firmware** — user reports confirm this breaks pairing.
+
 The mesh keys are stored unencrypted in the app's local storage. Use [iMazing](https://imazing.com) (free tier is enough) to pull the app container from your iPhone:
 
 1. iMazing → select device → Apps → Better Light → "Manage App" → "Export Documents"
