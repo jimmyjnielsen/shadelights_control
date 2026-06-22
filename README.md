@@ -9,7 +9,7 @@ Works from a **Raspberry Pi** (or any Linux/macOS machine with Bluetooth) using 
 | Command | Protocol |
 |---------|----------|
 | `on` / `off` | SIG Mesh Generic OnOff Set Unacknowledged (opcode `0x8203`) |
-| `scene <1-4>` | Nordic vendor model (company `0x0059`, opcode `0x23`) |
+| `scene <n>` | Nordic vendor model (company `0x0059`, opcode `0x23`) |
 | `info` | Print derived key material (NID, AID, EncKey, PrivKey) |
 
 ## Protocol summary
@@ -22,7 +22,7 @@ The lamp runs **Bluetooth SIG Mesh 1.0** (not CSRmesh as the hardware vintage mi
 Access PDU: E3 59 00 <scene_idx> <TID>
             └─┬──┘  └────┬─────┘ └─┬─┘
      opcode 0x23       0-based     transaction ID
-    company 0x0059    scene (0–3)  (increment each send)
+    company 0x0059    scene index  (increment each send)
 ```
 
 The TID prevents the lamp's replay-protection cache from dropping duplicate commands. Using `seq & 0xff` as the TID works fine.
