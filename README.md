@@ -81,7 +81,15 @@ The JSON structure should be identical to the iOS version. **This has not been t
 
 ---
 
-Fill the extracted values into the constants at the top of `mesh_crypto.py`.
+Once you have the file, run the parser to print everything you need — keys, lamp addresses, and all your configured moods:
+
+```bash
+python3 parse_provision_data.py /path/to/shade
+```
+
+The mood names and scene indices are personal — they reflect whatever you configured in the app. Use the printed index + 1 as the argument to `mesh_crypto.py scene <n>`.
+
+Fill the printed values into the constants at the top of `mesh_crypto.py`.
 
 ### 3. Find your lamp addresses
 
