@@ -1,4 +1,4 @@
-# Shadelights ØS1 — BLE Mesh reverse engineering
+# Shadelights ØS1 — standalone BLE control for smart home integration
 
 Standalone Python control for the **Shadelights ØS1** smart pendant lamp, normally controlled by the now-abandoned *Better Light* iOS/Android app (`one.shade.app`). No app, no cloud, no dependency on the vendor.
 

@@ -83,8 +83,8 @@ def turn_off():
 
 @app.post('/scene/<int:n>')
 def set_scene(n):
-    if n not in range(1, 5):
-        return jsonify({'error': 'scene must be 1-4'}), 400
+    if n < 1:
+        return jsonify({'error': 'scene must be >= 1'}), 400
     scene_idx = n - 1
     ok = _dispatch(lambda tid: bytes([0xE3, 0x59, 0x00, scene_idx, tid]))
     if ok:
