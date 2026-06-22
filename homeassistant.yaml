@@ -1,7 +1,8 @@
 # Shadelights ØS1 — Home Assistant configuration
 #
-# Append the sections below to your configuration.yaml.
-# The scene automation goes into automations.yaml.
+# configuration.yaml: append the rest_command, command_line, input_select,
+#                     and input_boolean blocks.
+# automations.yaml:   append the automations block.
 #
 # Replace 'raspberrypi.local' with the hostname or IP of your Pi if
 # accessing from a separate machine. If HA runs on the same Pi as
@@ -19,6 +20,15 @@ rest_command:
   shadelights_scene:
     url: "http://localhost:8765/scene/{{ scene }}"
     method: POST
+  shadelights_color:
+    url: "http://localhost:8765/color"
+    method: POST
+    content_type: "application/json"
+    payload: >
+      {"top_warm":{{ top_warm }},"top_cold":{{ top_cold }},
+       "bottom_warm":{{ bottom_warm }},"bottom_cold":{{ bottom_cold }},
+       "mid_warm":{{ mid_warm }},"mid_red":{{ mid_red }},
+       "mid_green":{{ mid_green }},"mid_blue":{{ mid_blue }}}
 
 # Switch entity — appears as a toggle in the HA UI.
 # Polls /status every 30s so HA stays in sync if the physical button or
@@ -44,15 +54,103 @@ input_select:
       - "4 - Golden Latte"
     icon: mdi:palette
 
-# ── automations.yaml ─────────────────────────────────────────────────────────
+# Tracks whether a CO2 alert is currently overriding the normal scene,
+# so the clear automation can restore it and the scene selector won't
+# fight an active alert.
+input_boolean:
+  shadelights_co2_alert:
+    name: Shadelights CO2 alert active
+    icon: mdi:molecule-co2
 
-# - id: shadelights_scene_changed
-#   alias: "Shadelights: apply scene"
-#   trigger:
-#     - platform: state
-#       entity_id: input_select.shadelights_scene
-#   action:
-#     - action: rest_command.shadelights_scene
-#       data:
-#         scene: "{{ trigger.to_state.state[0] }}"
-#   mode: single
+# ── automations.yaml ─────────────────────────────────────────────────────────
+#
+# CO2 thresholds (ppm):
+#   >1000  warning — orange-red mid ring
+#   >1500  alert   — deep red mid ring
+#   <800   clear   — restore the selected scene
+#
+# A 2-minute 'for:' debounce prevents flickering when CO2 hovers on a threshold.
+# The top/bottom zones stay at a neutral warm level during alerts so the room
+# remains lit. Adjust those values to match your preferred ambient brightness.
+
+- id: shadelights_co2_warning
+  alias: "Shadelights: CO2 warning (>1000 ppm)"
+  trigger:
+    - platform: numeric_state
+      entity_id: sensor.weather_station_carbon_dioxide
+      above: 1000
+      below: 1500
+      for: "00:02:00"
+  action:
+    - action: input_boolean.turn_on
+      target:
+        entity_id: input_boolean.shadelights_co2_alert
+    - action: rest_command.shadelights_color
+      data:
+        top_warm: 2000
+        top_cold: 0
+        bottom_warm: 1500
+        bottom_cold: 0
+        mid_warm: 0
+        mid_red: 2800
+        mid_green: 600
+        mid_blue: 0
+  mode: single
+
+- id: shadelights_co2_alert
+  alias: "Shadelights: CO2 alert (>1500 ppm)"
+  trigger:
+    - platform: numeric_state
+      entity_id: sensor.weather_station_carbon_dioxide
+      above: 1500
+      for: "00:02:00"
+  action:
+    - action: input_boolean.turn_on
+      target:
+        entity_id: input_boolean.shadelights_co2_alert
+    - action: rest_command.shadelights_color
+      data:
+        top_warm: 2000
+        top_cold: 0
+        bottom_warm: 1500
+        bottom_cold: 0
+        mid_warm: 0
+        mid_red: 3500
+        mid_green: 0
+        mid_blue: 0
+  mode: single
+
+- id: shadelights_co2_clear
+  alias: "Shadelights: CO2 clear (<800 ppm)"
+  trigger:
+    - platform: numeric_state
+      entity_id: sensor.weather_station_carbon_dioxide
+      below: 800
+      for: "00:02:00"
+  condition:
+    - condition: state
+      entity_id: input_boolean.shadelights_co2_alert
+      state: "on"
+  action:
+    - action: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.shadelights_co2_alert
+    - action: rest_command.shadelights_scene
+      data:
+        scene: "{{ states('input_select.shadelights_scene')[0] }}"
+  mode: single
+
+- id: shadelights_scene_changed
+  alias: "Shadelights: apply scene"
+  trigger:
+    - platform: state
+      entity_id: input_select.shadelights_scene
+  condition:
+    - condition: state
+      entity_id: input_boolean.shadelights_co2_alert
+      state: "off"
+  action:
+    - action: rest_command.shadelights_scene
+      data:
+        scene: "{{ trigger.to_state.state[0] }}"
+  mode: single

@@ -143,6 +143,32 @@ The pattern across two sweeps through all 4 scenes confirmed the encoding unambi
 
 Full on/off and scene control (all 4 presets) from a Raspberry Pi using standard Python and `bleak`. A Flask REST API (`shade_api.py`) with a persistent BLE connection provides near-instant response and integrates with Home Assistant via `rest_command`.
 
-## What Remains Unknown
+## Step 7: Decoding Color Control Opcodes
 
-- Opcodes for direct brightness, color temperature, and RGB control (the 4 scenes blend the lamp's 8 LED channels across 3 zones). A further sniffer capture while adjusting sliders in the app would reveal these.
+After implementing scene control, a second sniffer capture was taken while sweeping all the color sliders in the Better Light app (`betterlight_colors.pcapng`). Decrypting the capture with `decrypt_capture.py` revealed two additional Nordic vendor opcodes:
+
+| Opcode | Company | Access PDU prefix | Parameters |
+|--------|---------|-------------------|------------|
+| `0x18` | `0x0059` | `D8 59 00` | TopWarm, TopCold, BottomWarm, BottomCold + TID |
+| `0x19` | `0x0059` | `D9 59 00` | MidWarm, MidRed, MidGreen, MidBlue + TID |
+
+Both opcodes pack four **12-bit** channel values into 6 bytes (big-endian packed) followed by a 1-byte TID, for 7 bytes of parameters total. The encoding:
+
+```
+byte0 = ch0[11:4]
+byte1 = ch0[3:0]<<4 | ch1[11:8]
+byte2 = ch1[7:0]
+byte3 = ch2[11:4]
+byte4 = ch2[3:0]<<4 | ch3[11:8]
+byte5 = ch3[7:0]
+```
+
+The slider-to-channel mapping was confirmed by correlating which byte positions changed with which slider was being moved:
+- **Intensity upper** → opcode `0x18` ch0 (TopWarm) sweeps while ch1/ch2/ch3 constant
+- **Intensity lower** → opcode `0x18` ch2 (BottomWarm) sweeps
+- **Temperature upper** → opcode `0x18` ch0/ch1 ratio (TopWarm decreases as TopCold increases)
+- **Temperature lower** → opcode `0x18` ch2/ch3 ratio (BottomWarm/BottomCold)
+- **Mid color (RGB)** → opcode `0x19` ch1/ch2/ch3 (MidRed/MidGreen/MidBlue) rotate through hue
+- **Mid fade-to-white** → opcode `0x19` ch0 (MidWarm) increases as RGB fades
+
+Both PDUs are sent back-to-back on the same BLE connection for each color update. This is implemented in `mesh_crypto.py` (`build_color_access_pdus`) and `shade_api.py` (`POST /color`).

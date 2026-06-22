@@ -10,6 +10,7 @@ Works from a **Raspberry Pi** (or any Linux/macOS machine with Bluetooth) using 
 |---------|----------|
 | `on` / `off` | SIG Mesh Generic OnOff Set Unacknowledged (opcode `0x8203`) |
 | `scene <n>` | Nordic vendor model (company `0x0059`, opcode `0x23`) |
+| `color` | Nordic vendor model (company `0x0059`, opcodes `0x18`/`0x19`) — direct per-channel control |
 | `info` | Print derived key material (NID, AID, EncKey, PrivKey) |
 
 ## Protocol summary
@@ -26,6 +27,21 @@ Access PDU: E3 59 00 <scene_idx> <TID>
 ```
 
 The TID prevents the lamp's replay-protection cache from dropping duplicate commands. Using `seq & 0xff` as the TID works fine.
+
+**Color control** uses two Nordic vendor PDUs sent back-to-back over the same connection:
+
+```
+Opcode 0x18 access PDU: D8 59 00 | [TopWarm TopCold BotWarm BotCold packed] | TID
+Opcode 0x19 access PDU: D9 59 00 | [MidWarm MidRed  MidGreen MidBlue packed] | TID
+
+Channel values are 12-bit (0–4095), four per PDU, packed big-endian:
+  byte0 = ch0[11:4]
+  byte1 = ch0[3:0]<<4 | ch1[11:8]
+  byte2 = ch1[7:0]
+  byte3 = ch2[11:4]
+  byte4 = ch2[3:0]<<4 | ch3[11:8]
+  byte5 = ch3[7:0]
+```
 
 **Network PDU** format is standard SIG Mesh with:
 - NID derived via `k2(NetKey)`
@@ -136,6 +152,12 @@ curl -X POST http://raspberrypi.local:8765/on
 curl -X POST http://raspberrypi.local:8765/scene/2
 curl -X POST http://raspberrypi.local:8765/off
 curl http://raspberrypi.local:8765/status
+
+# Set all 8 LED channels directly (values 0-4095):
+curl -X POST http://raspberrypi.local:8765/color \
+  -H 'Content-Type: application/json' \
+  -d '{"top_warm":2000,"top_cold":500,"bottom_warm":1500,"bottom_cold":0,
+       "mid_warm":0,"mid_red":1200,"mid_green":300,"mid_blue":0}'
 ```
 
 The service reconnects automatically if the BLE connection drops, and retries once on failure.
@@ -232,13 +254,13 @@ To discover opcodes for brightness, color temperature, or RGB control:
 
 The ØS1 has 8 LED channels across 3 zones:
 
-| Zone | Channels |
-|------|----------|
-| Top ring | TopWarm, TopCold |
-| Middle ring | MidRed, MidGreen, MidBlue, MidWarm |
-| Bottom ring | BottomWarm, BottomCold |
+| Zone | Channels | Opcode |
+|------|----------|--------|
+| Top ring | TopWarm, TopCold | `0x18` |
+| Bottom ring | BottomWarm, BottomCold | `0x18` |
+| Middle ring | MidWarm, MidRed, MidGreen, MidBlue | `0x19` |
 
-The four built-in scenes blend these channels. Custom per-channel control likely uses additional Nordic vendor opcodes (not yet captured).
+Scenes blend these channels with stored presets. The `/color` endpoint sets all 8 channels directly with 12-bit resolution (0–4095).
 
 ## Files
 

@@ -2,98 +2,142 @@
 """
 Shadelights ØS1 REST API with persistent BLE connection.
 
-Keeps a permanent BleakClient open to one lamp so commands are sent
-immediately over an established connection (~50ms) rather than waiting
-for a new BLE connection on every request (~3-5s).
+Uses Quart (async Flask) so BLE and HTTP share one asyncio event loop —
+no cross-thread issues with bleak's BlueZ backend.
 
 Endpoints:
   POST /on
   POST /off
-  POST /scene/<1-4>
+  POST /scene/<n>
+  POST /color   JSON body: {top_warm, top_cold, bottom_warm, bottom_cold,
+                             mid_warm, mid_red, mid_green, mid_blue}  (0-4095)
   GET  /status
 """
 
-import asyncio, threading, sys
-from flask import Flask, jsonify
-from bleak import BleakClient, BleakError
+import asyncio, sys
+from quart import Quart, jsonify, request
+from bleak import BleakClient, BleakScanner, BleakError
 
-sys.path.insert(0, '/home/jjn/shadelights')
+sys.path.insert(0, '/home/pi/shadelights')
 import mesh_crypto as mc
 
 HOST = '0.0.0.0'
 PORT = 8765
-LAMP_ADDR = list(mc.LAMP_GATT.values())[0]   # proxy into the mesh via one lamp
+LAMP_ADDRS = list(mc.LAMP_GATT.values())   # try each until one answers
 
-app = Flask(__name__)
+app = Quart(__name__)
 _state = {'power': 'off', 'scene': None}
-
-# ── Persistent BLE connection in a background asyncio loop ────────────────────
-
-_loop = asyncio.new_event_loop()
-threading.Thread(target=_loop.run_forever, daemon=True).start()
-
 _client: BleakClient | None = None
+_send_lock = asyncio.Lock()
 
 async def _ensure_connected() -> BleakClient:
     global _client
     if _client and _client.is_connected:
         return _client
-    _client = BleakClient(LAMP_ADDR, timeout=15)
-    await _client.connect()
-    return _client
-
-async def _send(make_access) -> bool:
-    """Send a mesh command.  make_access(tid) -> access PDU bytes.
-    Retries once with a fresh connection on failure."""
-    global _client
-    for attempt in range(2):
+    # Scan to populate BlueZ's device cache, then try each known lamp address.
+    found = {d.address: d
+             for d in await BleakScanner.discover(timeout=8)
+             if d.address in LAMP_ADDRS}
+    for addr in LAMP_ADDRS:
+        device = found.get(addr)
+        if device is None:
+            continue
         try:
-            seq    = mc.next_seq()
-            access = make_access(seq & 0xff)
-            pdu    = mc.build_network_pdu_raw(access, mc.GROUP_ADDR, seq)
-            proxy  = mc.proxy_pdu(0x00, pdu)
-            client = await _ensure_connected()
-            await client.write_gatt_char(mc.PROXY_DATA_IN, proxy, response=False)
-            return True
+            _client = BleakClient(device, timeout=12)
+            await _client.connect()
+            return _client
         except (BleakError, Exception):
             _client = None
-            if attempt == 0:
-                await asyncio.sleep(0.3)
-    return False
+    raise BleakError(f"No lamp found among {LAMP_ADDRS}")
 
-def _dispatch(make_access) -> bool:
-    future = asyncio.run_coroutine_threadsafe(_send(make_access), _loop)
-    return future.result(timeout=15)
+async def _send(*make_access_fns) -> bool:
+    """Send one or more mesh commands. make_access(tid) -> bytes per fn."""
+    global _client
+    async with _send_lock:
+        for attempt in range(2):
+            try:
+                client = await _ensure_connected()
+                for make_access in make_access_fns:
+                    seq    = mc.next_seq()
+                    access = make_access(seq & 0xff)
+                    pdu    = mc.build_network_pdu_raw(access, mc.GROUP_ADDR, seq)
+                    proxy  = mc.proxy_pdu(0x00, pdu)
+                    await client.write_gatt_char(mc.PROXY_DATA_IN, proxy, response=False)
+                return True
+            except (BleakError, Exception):
+                _client = None
+                if attempt == 0:
+                    await asyncio.sleep(0.5)
+    return False
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @app.post('/on')
-def turn_on():
-    ok = _dispatch(lambda tid: bytes([0x82, 0x03, 0x01, tid]))
+async def turn_on():
+    ok = await _send(lambda tid: bytes([0x82, 0x03, 0x01, tid]))
     if ok:
         _state['power'] = 'on'
     return jsonify({'ok': ok, 'state': _state}), (200 if ok else 500)
 
 @app.post('/off')
-def turn_off():
-    ok = _dispatch(lambda tid: bytes([0x82, 0x03, 0x00, tid]))
+async def turn_off():
+    ok = await _send(lambda tid: bytes([0x82, 0x03, 0x00, tid]))
     if ok:
         _state['power'] = 'off'
     return jsonify({'ok': ok, 'state': _state}), (200 if ok else 500)
 
 @app.post('/scene/<int:n>')
-def set_scene(n):
+async def set_scene(n):
     if n < 1:
         return jsonify({'error': 'scene must be >= 1'}), 400
     scene_idx = n - 1
-    ok = _dispatch(lambda tid: bytes([0xE3, 0x59, 0x00, scene_idx, tid]))
+    ok = await _send(lambda tid: bytes([0xE3, 0x59, 0x00, scene_idx, tid]))
     if ok:
         _state['power'] = 'on'
         _state['scene'] = n
+        _state.pop('color', None)
+    return jsonify({'ok': ok, 'state': _state}), (200 if ok else 500)
+
+@app.post('/color')
+async def set_color():
+    body = await request.get_json(silent=True) or {}
+    keys = ['top_warm', 'top_cold', 'bottom_warm', 'bottom_cold',
+            'mid_warm', 'mid_red', 'mid_green', 'mid_blue']
+    try:
+        vals = {k: int(body[k]) for k in keys}
+    except (KeyError, ValueError, TypeError) as e:
+        return jsonify({'error': f'missing or invalid field: {e}'}), 400
+    for k, v in vals.items():
+        if not 0 <= v <= 4095:
+            return jsonify({'error': f'{k} must be 0-4095'}), 400
+
+    def make_18(tid):
+        a18, _ = mc.build_color_access_pdus(
+            vals['top_warm'], vals['top_cold'],
+            vals['bottom_warm'], vals['bottom_cold'],
+            vals['mid_warm'], vals['mid_red'], vals['mid_green'], vals['mid_blue'],
+            tid=tid,
+        )
+        return a18
+
+    def make_19(tid):
+        _, a19 = mc.build_color_access_pdus(
+            vals['top_warm'], vals['top_cold'],
+            vals['bottom_warm'], vals['bottom_cold'],
+            vals['mid_warm'], vals['mid_red'], vals['mid_green'], vals['mid_blue'],
+            tid=tid,
+        )
+        return a19
+
+    ok = await _send(make_18, make_19)
+    if ok:
+        _state['power'] = 'on'
+        _state['color'] = vals
+        _state['scene'] = None
     return jsonify({'ok': ok, 'state': _state}), (200 if ok else 500)
 
 @app.get('/status')
-def status():
+async def status():
     return jsonify(_state)
 
 if __name__ == '__main__':

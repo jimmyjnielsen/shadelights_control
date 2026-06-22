@@ -9,8 +9,12 @@ Usage:
     python3 mesh_crypto.py on          # turn all lamps on
     python3 mesh_crypto.py off         # turn all lamps off
     python3 mesh_crypto.py scene <1-4> # activate a saved scene
+    python3 mesh_crypto.py color <top_warm> <top_cold> <bottom_warm> <bottom_cold> <mid_warm> <mid_red> <mid_green> <mid_blue>
     python3 mesh_crypto.py on   c001   # explicit group address
     python3 mesh_crypto.py info        # print derived key material
+
+  All color/channel values are 0-4095 (12-bit).
+  Channels: TopWarm, TopCold, BottomWarm, BottomCold, MidWarm, MidRed, MidGreen, MidBlue
 """
 
 import asyncio, struct, sys
@@ -105,6 +109,32 @@ def _net_nonce(ctl: int, ttl: int, seq: int, src: int, iv: int) -> bytes:
             + b'\x00\x00'                         # padding
             + struct.pack('>I', iv))              # 4 bytes
 
+def _pack_12bit(a: int, b: int, c: int, d: int) -> bytes:
+    """Pack four 12-bit values (0–4095) into 6 bytes, big-endian packed."""
+    v = (a << 36) | (b << 24) | (c << 12) | d
+    return v.to_bytes(6, 'big')
+
+def build_color_access_pdus(
+    top_warm: int, top_cold: int,
+    bottom_warm: int, bottom_cold: int,
+    mid_warm: int, mid_red: int, mid_green: int, mid_blue: int,
+    tid: int,
+) -> tuple[bytes, bytes]:
+    """
+    Return the two Access PDUs needed to set all 8 LED channels.
+
+    Opcode 0x18 (Nordic vendor, company 0x0059):
+      params = pack_12bit(TopWarm, TopCold, BottomWarm, BottomCold) + TID
+    Opcode 0x19:
+      params = pack_12bit(MidWarm, MidRed, MidGreen, MidBlue) + TID
+    """
+    params_18 = _pack_12bit(top_warm, top_cold, bottom_warm, bottom_cold) + bytes([tid])
+    params_19 = _pack_12bit(mid_warm, mid_red, mid_green, mid_blue) + bytes([tid])
+    return (
+        bytes([0xD8, 0x59, 0x00]) + params_18,
+        bytes([0xD9, 0x59, 0x00]) + params_19,
+    )
+
 def build_access_pdu(opcode: bytes, params: bytes) -> bytes:
     return opcode + params
 
@@ -185,16 +215,17 @@ def proxy_pdu(msg_type: int, data: bytes) -> bytes:
 
 # ── GATT Mesh Proxy sending ───────────────────────────────────────────────────
 
-async def _send_raw(net_pdu: bytes):
-    proxy_msg = proxy_pdu(0x00, net_pdu)
+async def _send_raw(*net_pdus: bytes):
+    """Send one or more network PDUs over the same GATT connection."""
     for gatt_addr in list(LAMP_GATT.values()):
         try:
             async with BleakClient(gatt_addr, timeout=15) as client:
                 notifications = []
                 def on_notify(_, data): notifications.append(data.hex())
                 await client.start_notify(PROXY_DATA_OUT, on_notify)
-                await client.write_gatt_char(PROXY_DATA_IN, proxy_msg, response=False)
-                print(f"  Sent to {gatt_addr}")
+                for pdu in net_pdus:
+                    await client.write_gatt_char(PROXY_DATA_IN, proxy_pdu(0x00, pdu), response=False)
+                print(f"  Sent {len(net_pdus)} PDU(s) to {gatt_addr}")
                 await asyncio.sleep(1)
                 for n in notifications: print(f"  [NOTIFY] {n}")
                 await client.stop_notify(PROXY_DATA_OUT)
@@ -233,7 +264,7 @@ async def send(onoff: bool, dst: int, seq: int = 0):
 
 
 def main():
-    CMDS = ('on', 'off', 'info', 'brightness', 'ct', 'level', 'scene')
+    CMDS = ('on', 'off', 'info', 'brightness', 'ct', 'level', 'scene', 'color')
     if len(sys.argv) < 2 or sys.argv[1] not in CMDS:
         print(__doc__)
         sys.exit(1)
@@ -317,6 +348,31 @@ def main():
         print(f"Scene {scene_num} (idx={scene_idx} tid=0x{tid:02x}) → dst=0x{dst:04x}  seq={seq}")
         print(f"  Access PDU: {access.hex()}")
         asyncio.run(_send_raw(pdu)); return
+
+    if sys.argv[1] == 'color':
+        # Nordic vendor model direct channel control (company 0x0059).
+        # Two PDUs per call, each encoding 4 × 12-bit channel values:
+        #   Opcode 0x18 (0xD8 0x59 0x00): TopWarm, TopCold, BottomWarm, BottomCold
+        #   Opcode 0x19 (0xD9 0x59 0x00): MidWarm, MidRed, MidGreen, MidBlue
+        if len(sys.argv) < 10:
+            print("Usage: color <top_warm> <top_cold> <bottom_warm> <bottom_cold>"
+                  " <mid_warm> <mid_red> <mid_green> <mid_blue>  (values 0-4095)")
+            sys.exit(1)
+        vals = [int(a) for a in sys.argv[2:10]]
+        for v in vals:
+            if not 0 <= v <= 4095:
+                print("All values must be 0-4095"); sys.exit(1)
+        dst  = int(sys.argv[10], 16) if len(sys.argv) > 10 else GROUP_ADDR
+        seq1 = next_seq(); seq2 = next_seq()
+        tid  = seq1 & 0xff
+        a18, a19 = build_color_access_pdus(*vals, tid=tid)
+        pdu1 = build_network_pdu_raw(a18, dst, seq1)
+        pdu2 = build_network_pdu_raw(a19, dst, seq2)
+        labels = ['TopWarm', 'TopCold', 'BotWarm', 'BotCold', 'MidWarm', 'MidRed', 'MidGreen', 'MidBlue']
+        print("Color →", "  ".join(f"{l}={v}" for l, v in zip(labels, vals)))
+        print(f"  op18: {a18.hex()}")
+        print(f"  op19: {a19.hex()}")
+        asyncio.run(_send_raw(pdu1, pdu2)); return
 
     onoff = sys.argv[1] == 'on'
     dst   = int(sys.argv[2], 16) if len(sys.argv) > 2 else GROUP_ADDR
