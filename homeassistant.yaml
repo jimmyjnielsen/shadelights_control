@@ -1,37 +1,39 @@
 # Shadelights ØS1 — Home Assistant configuration
 #
-# Add the sections below to your configuration.yaml (or split into
-# separate files if you use the packages/split config approach).
+# Append the sections below to your configuration.yaml.
+# The scene automation goes into automations.yaml.
 #
-# Replace 'raspberrypi.local' with the hostname or IP of your Pi.
+# Replace 'raspberrypi.local' with the hostname or IP of your Pi if
+# accessing from a separate machine. If HA runs on the same Pi as
+# shade_api.py (e.g. in Docker with --network=host), use localhost.
 
-# ── REST commands (low-level) ────────────────────────────────────────────────
+# ── configuration.yaml ───────────────────────────────────────────────────────
+
 rest_command:
   shadelights_on:
-    url: "http://raspberrypi.local:8765/on"
+    url: "http://localhost:8765/on"
     method: POST
   shadelights_off:
-    url: "http://raspberrypi.local:8765/off"
+    url: "http://localhost:8765/off"
     method: POST
   shadelights_scene:
-    url: "http://raspberrypi.local:8765/scene/{{ scene }}"
+    url: "http://localhost:8765/scene/{{ scene }}"
     method: POST
 
-# ── Switch entity (on/off) ───────────────────────────────────────────────────
-switch:
-  - platform: rest
-    name: Shadelights
-    resource: http://raspberrypi.local:8765/status
-    body_on: '{"power": "on"}'
-    body_off: '{"power": "off"}'
-    is_on_template: "{{ value_json.power == 'on' }}"
-    headers:
-      Content-Type: application/json
-    scan_interval: 60
-    command_on: http://raspberrypi.local:8765/on
-    command_off: http://raspberrypi.local:8765/off
+# Switch entity — appears as a toggle in the HA UI.
+# Polls /status every 30s so HA stays in sync if the physical button or
+# app is used to change state.
+command_line:
+  - switch:
+      name: Shadelights
+      unique_id: shadelights_power
+      command_on: "curl -s -X POST http://localhost:8765/on"
+      command_off: "curl -s -X POST http://localhost:8765/off"
+      command_state: "curl -s http://localhost:8765/status"
+      value_template: "{{ value_json.power == 'on' }}"
+      icon: mdi:ceiling-light
 
-# ── Scene selector ───────────────────────────────────────────────────────────
+# Scene selector dropdown.
 input_select:
   shadelights_scene:
     name: Shadelights Scene
@@ -42,13 +44,15 @@ input_select:
       - "4 - Golden Latte"
     icon: mdi:palette
 
-# ── Automation: apply scene when selector changes ────────────────────────────
-automation:
-  - alias: "Shadelights scene changed"
-    trigger:
-      - platform: state
-        entity_id: input_select.shadelights_scene
-    action:
-      - service: rest_command.shadelights_scene
-        data:
-          scene: "{{ trigger.to_state.state[0] }}"
+# ── automations.yaml ─────────────────────────────────────────────────────────
+
+# - id: shadelights_scene_changed
+#   alias: "Shadelights: apply scene"
+#   trigger:
+#     - platform: state
+#       entity_id: input_select.shadelights_scene
+#   action:
+#     - action: rest_command.shadelights_scene
+#       data:
+#         scene: "{{ trigger.to_state.state[0] }}"
+#   mode: single
