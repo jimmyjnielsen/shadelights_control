@@ -135,6 +135,25 @@ async def set_color():
         _state['scene'] = None
     return jsonify({'ok': ok, 'state': _state}), (200 if ok else 500)
 
+@app.post('/brightness')
+async def set_brightness():
+    body = await request.get_json(silent=True) or {}
+    try:
+        pct = int(body['pct'])
+    except (KeyError, ValueError, TypeError) as e:
+        return jsonify({'error': f'missing or invalid field: {e}'}), 400
+    if not 0 <= pct <= 100:
+        return jsonify({'error': 'pct must be 0-100'}), 400
+
+    lightness = int(pct / 100 * 65535) & 0xFFFF
+    lo, hi = lightness & 0xff, (lightness >> 8) & 0xff
+
+    # Light Lightness Set Unacknowledged (SIG Mesh opcode 0x824C)
+    ok = await _send(lambda tid: bytes([0x82, 0x4c, lo, hi, tid]))
+    if ok:
+        _state['brightness'] = pct
+    return jsonify({'ok': ok, 'state': _state}), (200 if ok else 500)
+
 @app.get('/status')
 async def status():
     return jsonify(_state)
