@@ -14,16 +14,20 @@ rest_command:
   shadelights_on:
     url: "http://localhost:8765/on"
     method: POST
+    timeout: 30
   shadelights_off:
     url: "http://localhost:8765/off"
     method: POST
+    timeout: 30
   shadelights_scene:
     url: "http://localhost:8765/scene/{{ scene }}"
     method: POST
+    timeout: 30
   shadelights_color:
     url: "http://localhost:8765/color"
     method: POST
     content_type: "application/json"
+    timeout: 30
     payload: >
       {"top_warm":{{ top_warm }},"top_cold":{{ top_cold }},
        "bottom_warm":{{ bottom_warm }},"bottom_cold":{{ bottom_cold }},
@@ -33,6 +37,7 @@ rest_command:
     url: "http://localhost:8765/brightness"
     method: POST
     content_type: "application/json"
+    timeout: 30
     payload: '{"pct": {{ pct | int }}}'
 
 # Switch entity — appears as a toggle in the HA UI.
