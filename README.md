@@ -1,6 +1,6 @@
-# Shadelights ØS1 — standalone BLE control for smart home integration
+# Shadelights ØS1 / The ORB — standalone BLE control for smart home integration
 
-Standalone Python control for the **Shadelights ØS1** smart pendant lamp, normally controlled by the now-abandoned *Better Light* iOS/Android app (`one.shade.app`). No app, no cloud, no dependency on the vendor.
+Standalone Python control for the **Shadelights ØS1** (also sold as **The ORB**) smart pendant lamp, normally controlled by the now-abandoned *Better Light* iOS/Android app (`one.shade.app`). No app, no cloud, no dependency on the vendor.
 
 Works from a **Raspberry Pi** (or any Linux/macOS machine with Bluetooth) using the standard BLE Mesh GATT Proxy bearer.
 
@@ -273,6 +273,10 @@ Scenes blend these channels with stored presets. The `/color` endpoint sets all 
 | `lamp_gatt.py` | GATT service discovery script |
 | `extract_ios_appdata.py` | Helper to parse `provisionModelData` JSON |
 | `shadelights-ble-reverse-engineering-plan.md` | Full analysis plan and notes |
+
+## Acknowledgements
+
+The reverse engineering process — packet parsing, protocol identification, key extraction, crypto implementation, and Home Assistant integration — was carried out with [Claude Code](https://claude.ai/code) (Anthropic). The iterative analysis of BLE captures and decoding of vendor opcodes would have taken significantly longer without it.
 
 ## License
 
