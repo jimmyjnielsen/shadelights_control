@@ -57,14 +57,14 @@ The file at `Container/Documents/shade` is a JSON object with four top-level key
     "groupId": 49153,
     "orbs": [{                         // ORB = pendant lamp
       "name": "ØS1",
-      "mac": "DD:ED:D3:82:3D:DD",     // BLE MAC address
+      "mac": "AA:BB:CC:DD:EE:FF",     // BLE MAC address
       "address": 33,                   // mesh unicast address (0x0021)
       "firmwareAppVersion": 17,
       "moods": [...]                   // per-lamp copy of the moods
     }],
     "eclipses": [{                     // eclipse = mesh button
       "name": "Node",
-      "mac": "C4:53:3D:22:07:24",
+      "mac": "AA:BB:CC:DD:EE:FE",
       "address": 97                    // mesh unicast address (0x0061)
     }],
     "moodMap": {

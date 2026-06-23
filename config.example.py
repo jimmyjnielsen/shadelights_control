@@ -11,7 +11,7 @@
 # config.py is gitignored — never commit it.
 
 # 16-byte mesh keys (hex strings, from provisionModelData)
-NET_KEY = 'YOUR_NET_KEY_HEX_HERE'   # e.g. '0e3439297042635feccc0baf1cba5504'
+NET_KEY = 'YOUR_NET_KEY_HEX_HERE'   # 32 hex chars (16 bytes)
 APP_KEY = 'YOUR_APP_KEY_HEX_HERE'
 
 # BLE MAC address for each lamp, keyed by mesh unicast address

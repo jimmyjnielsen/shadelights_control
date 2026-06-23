@@ -15,8 +15,8 @@ from bleak import BleakClient, BleakScanner
 
 # Known lamp addresses from initial scan
 LAMPS = [
-    'DD:ED:D3:82:3D:DD',   # lamp 1, mesh addr 0x0002
-    'C8:67:B4:3E:E7:CC',   # lamp 2
+    'AA:BB:CC:DD:EE:FF',   # lamp 1 — replace with your lamp's BLE MAC
+    # 'AA:BB:CC:DD:EE:FE', # lamp 2 (add more as needed)
 ]
 
 # Standard BLE Mesh Proxy (0x1828)

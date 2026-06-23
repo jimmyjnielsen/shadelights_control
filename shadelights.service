@@ -4,9 +4,9 @@ After=bluetooth.target network.target
 
 [Service]
 Type=simple
-User=jjn
-WorkingDirectory=/home/jjn/shadelights
-ExecStart=/usr/bin/python3 /home/jjn/shadelights/shade_api.py
+User=pi
+WorkingDirectory=/home/pi/shadelights
+ExecStart=/usr/bin/python3 /home/pi/shadelights/shade_api.py
 Restart=on-failure
 RestartSec=5
 
