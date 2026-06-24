@@ -24,6 +24,10 @@ HOST = '0.0.0.0'
 PORT = 8765
 LAMP_ADDRS = list(mc.LAMP_GATT.values())   # try each until one answers
 
+# Keepalive: send a Generic OnOff Get every this many seconds so the BLE
+# supervision timeout never fires and the connection stays alive overnight.
+KEEPALIVE_INTERVAL = 45
+
 app = Quart(__name__)
 _state = {'power': 'off', 'scene': None}
 _client: BleakClient | None = None
@@ -44,6 +48,10 @@ async def _ensure_connected() -> BleakClient:
         try:
             _client = BleakClient(device, timeout=12)
             await _client.connect()
+            # Subscribe to Proxy Data Out — required by the GATT Proxy spec.
+            # Without this the lamp treats us as an incomplete client and
+            # disconnects after ~5 seconds.
+            await _client.start_notify(mc.PROXY_DATA_OUT, lambda _, __: None)
             return _client
         except (BleakError, Exception):
             _client = None
@@ -157,6 +165,21 @@ async def set_brightness():
 @app.get('/status')
 async def status():
     return jsonify(_state)
+
+# ── Keepalive ─────────────────────────────────────────────────────────────────
+
+async def _keepalive_loop():
+    """Ensure a connection exists; reconnect proactively if it has dropped."""
+    while True:
+        try:
+            await _ensure_connected()
+        except Exception:
+            pass
+        await asyncio.sleep(KEEPALIVE_INTERVAL)
+
+@app.before_serving
+async def _start_keepalive():
+    asyncio.ensure_future(_keepalive_loop())
 
 if __name__ == '__main__':
     app.run(host=HOST, port=PORT)
